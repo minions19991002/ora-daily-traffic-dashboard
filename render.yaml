@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: ora-daily-traffic-dashboard
+    runtime: static
+    buildCommand: ""
+    staticPublishPath: ./dist
+    autoDeploy: true
