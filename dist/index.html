@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="上传五类 ORA 平台数据，按单日或多日生成流量日报并导出 Excel。" />
+  <title>ORA 日报流量看板</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#top" aria-label="返回顶部">
+      <span class="brand-mark">O</span>
+      <span><strong>ORA</strong><small>DAILY TRAFFIC</small></span>
+    </a>
+    <div class="privacy"><span></span>文件仅在当前浏览器中处理</div>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <p class="eyebrow">外送运营工具</p>
+      <h1>日报流量看板</h1>
+      <p class="hero-copy">上传 5 个数据表，选择一天或一段日期，生成美团与淘闪流量报表。</p>
+      <div class="steps" aria-label="使用步骤">
+        <span class="active"><b>01</b> 上传数据</span><i></i>
+        <span><b>02</b> 选择日期</span><i></i>
+        <span><b>03</b> 生成报表</span>
+      </div>
+    </section>
+
+    <section class="panel upload-panel">
+      <div class="section-head">
+        <div><p class="kicker">DATA INPUT</p><h2>上传数据表</h2></div>
+        <button id="clearBtn" class="text-btn" type="button">清空全部</button>
+      </div>
+      <label class="dropzone" id="dropzone">
+        <input id="fileInput" type="file" accept=".xlsx,.xls" multiple />
+        <span class="upload-icon">↑</span>
+        <strong>点击选择或拖入 Excel 文件</strong>
+        <small>可一次上传全部文件，系统按表头自动识别</small>
+      </label>
+      <div class="file-grid" id="fileGrid"></div>
+      <p class="hint" id="uploadHint">需要：美团门店数据、饿了么门店数据、美团推广、饿了么推广、门店信息表</p>
+    </section>
+
+    <section class="panel controls-panel">
+      <div class="section-head">
+        <div><p class="kicker">REPORT PERIOD</p><h2>报表周期</h2></div>
+        <div class="segmented" role="group" aria-label="日期模式">
+          <button type="button" class="active" data-mode="single">单日</button>
+          <button type="button" data-mode="range">多日</button>
+        </div>
+      </div>
+      <div class="date-row">
+        <label><span>开始日期</span><input id="startDate" type="date" disabled /></label>
+        <label id="endWrap" class="hidden"><span>结束日期</span><input id="endDate" type="date" disabled /></label>
+        <button id="generateBtn" class="primary" type="button" disabled>生成报表</button>
+      </div>
+      <div id="message" class="message" role="status"></div>
+    </section>
+
+    <section id="report" class="report hidden">
+      <div class="report-head">
+        <div><p class="kicker">REPORT OUTPUT</p><h2 id="reportTitle">ORA 流量日报</h2><p id="reportMeta"></p></div>
+        <div class="actions"><button id="copyBtn" class="secondary" type="button">复制表格</button><button id="downloadBtn" class="primary" type="button">下载 Excel</button></div>
+      </div>
+      <div class="summary" id="summaryCards"></div>
+      <div class="tabs" role="tablist"><button class="active" data-platform="mt" role="tab">美团</button><button data-platform="ele" role="tab">淘闪</button></div>
+      <div class="table-card"><div class="table-wrap"><table id="reportTable"></table></div></div>
+      <details class="method"><summary>查看计算口径</summary><div id="methodText"></div></details>
+    </section>
+  </main>
+
+  <footer>ORA DAILY TRAFFIC · 浏览器本地计算</footer>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
