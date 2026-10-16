@@ -230,6 +230,22 @@ function prepareExportStyles(stylesDoc) {
     return format.getAttribute('numFmtId');
   };
   const oneDecimalId=ensureFormat('0.0','177'), percentId=ensureFormat('0.0%','178');
+  const borders=stylesDoc.getElementsByTagName('borders')[0];
+  const addThinBorder=sides=>{
+    const border=stylesDoc.createElementNS(ns,'border');
+    ['left','right','top','bottom'].forEach(name=>{
+      const side=stylesDoc.createElementNS(ns,name);
+      if(sides.includes(name)) {
+        side.setAttribute('style','thin');
+        const color=stylesDoc.createElementNS(ns,'color'); color.setAttribute('indexed','64'); side.appendChild(color);
+      }
+      border.appendChild(side);
+    });
+    border.appendChild(stylesDoc.createElementNS(ns,'diagonal'));
+    borders.appendChild(border); borders.setAttribute('count',borders.children.length);
+    return String(borders.children.length-1);
+  };
+  const totalLeftBorder=addThinBorder(['left','top','bottom']), totalMiddleBorder=addThinBorder(['top','bottom']), totalRightBorder=addThinBorder(['right','top','bottom']);
   const fonts=stylesDoc.getElementsByTagName('fonts')[0], boldFont=fonts.children[3].cloneNode(true);
   if(!boldFont.getElementsByTagName('b').length) boldFont.insertBefore(stylesDoc.createElementNS(ns,'b'),boldFont.firstChild);
   fonts.appendChild(boldFont); fonts.setAttribute('count',fonts.children.length);
@@ -242,10 +258,10 @@ function prepareExportStyles(stylesDoc) {
     cellXfs.appendChild(xf); cellXfs.setAttribute('count',cellXfs.children.length);
     return cellXfs.children.length-1;
   };
-  const totalText=addStyle(17,{fontId:boldFontId}), totalPercent=addStyle(5,{numFmtId:percentId,fontId:boldFontId}), totalMoney=addStyle(5,{numFmtId:'2',fontId:boldFontId});
+  const totalText=addStyle(17,{fontId:boldFontId,borderId:totalMiddleBorder}), totalPercent=addStyle(5,{numFmtId:percentId,fontId:boldFontId,borderId:totalMiddleBorder}), totalMoney=addStyle(5,{numFmtId:'2',fontId:boldFontId,borderId:totalMiddleBorder});
   return {
     detail:{D:addStyle(41,{numFmtId:'3',borderId:'4'}),E:addStyle(42,{numFmtId:percentId,borderId:'0'}),F:addStyle(42,{numFmtId:percentId,borderId:'0'}),G:addStyle(42,{numFmtId:'3',borderId:'0'}),H:addStyle(42,{numFmtId:'2',borderId:'0'}),I:addStyle(42,{numFmtId:percentId,borderId:'0'}),J:addStyle(43,{numFmtId:'3',borderId:'0'}),K:addStyle(44,{numFmtId:oneDecimalId,borderId:'5'})},
-    total:{A:addStyle(16,{fontId:boldFontId}),B:totalText,C:totalText,D:addStyle(4,{numFmtId:'3',fontId:boldFontId}),E:totalPercent,F:totalPercent,G:addStyle(5,{numFmtId:'3',fontId:boldFontId}),H:totalMoney,I:totalPercent,J:addStyle(5,{numFmtId:'3',fontId:boldFontId}),K:addStyle(6,{numFmtId:oneDecimalId,fontId:boldFontId})}
+    total:{A:addStyle(16,{fontId:boldFontId,borderId:totalLeftBorder}),B:totalText,C:totalText,D:addStyle(4,{numFmtId:'3',fontId:boldFontId,borderId:totalLeftBorder}),E:totalPercent,F:totalPercent,G:addStyle(5,{numFmtId:'3',fontId:boldFontId,borderId:totalMiddleBorder}),H:totalMoney,I:totalPercent,J:addStyle(5,{numFmtId:'3',fontId:boldFontId,borderId:totalMiddleBorder}),K:addStyle(6,{numFmtId:oneDecimalId,fontId:boldFontId,borderId:totalRightBorder})}
   };
 }
 function applyRowStyles(doc,rowNumber,styles,isTotal=false) {
