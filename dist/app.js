@@ -234,16 +234,17 @@ function prepareExportStyles(stylesDoc) {
   if(!boldFont.getElementsByTagName('b').length) boldFont.insertBefore(stylesDoc.createElementNS(ns,'b'),boldFont.firstChild);
   fonts.appendChild(boldFont); fonts.setAttribute('count',fonts.children.length);
   const boldFontId=fonts.children.length-1, cellXfs=stylesDoc.getElementsByTagName('cellXfs')[0];
-  const addStyle=(baseIndex,{numFmtId=null,fontId=null}={})=>{
+  const addStyle=(baseIndex,{numFmtId=null,fontId=null,borderId=null}={})=>{
     const xf=cellXfs.children[baseIndex].cloneNode(true);
     if(numFmtId!=null) { xf.setAttribute('numFmtId',numFmtId); xf.setAttribute('applyNumberFormat','1'); }
     if(fontId!=null) { xf.setAttribute('fontId',fontId); xf.setAttribute('applyFont','1'); }
+    if(borderId!=null) { xf.setAttribute('borderId',borderId); xf.setAttribute('applyBorder','1'); }
     cellXfs.appendChild(xf); cellXfs.setAttribute('count',cellXfs.children.length);
     return cellXfs.children.length-1;
   };
   const totalText=addStyle(17,{fontId:boldFontId}), totalPercent=addStyle(5,{numFmtId:percentId,fontId:boldFontId}), totalMoney=addStyle(5,{numFmtId:'2',fontId:boldFontId});
   return {
-    detail:{D:addStyle(41,{numFmtId:'3'}),E:addStyle(42,{numFmtId:percentId}),F:addStyle(42,{numFmtId:percentId}),G:addStyle(42,{numFmtId:'3'}),H:addStyle(42,{numFmtId:'2'}),I:addStyle(42,{numFmtId:percentId}),J:addStyle(43,{numFmtId:'3'}),K:addStyle(44,{numFmtId:oneDecimalId})},
+    detail:{D:addStyle(41,{numFmtId:'3',borderId:'4'}),E:addStyle(42,{numFmtId:percentId,borderId:'0'}),F:addStyle(42,{numFmtId:percentId,borderId:'0'}),G:addStyle(42,{numFmtId:'3',borderId:'0'}),H:addStyle(42,{numFmtId:'2',borderId:'0'}),I:addStyle(42,{numFmtId:percentId,borderId:'0'}),J:addStyle(43,{numFmtId:'3',borderId:'0'}),K:addStyle(44,{numFmtId:oneDecimalId,borderId:'5'})},
     total:{A:addStyle(16,{fontId:boldFontId}),B:totalText,C:totalText,D:addStyle(4,{numFmtId:'3',fontId:boldFontId}),E:totalPercent,F:totalPercent,G:addStyle(5,{numFmtId:'3',fontId:boldFontId}),H:totalMoney,I:totalPercent,J:addStyle(5,{numFmtId:'3',fontId:boldFontId}),K:addStyle(6,{numFmtId:oneDecimalId,fontId:boldFontId})}
   };
 }
