@@ -2,6 +2,7 @@ const TYPES = {
   mtStore: '美团门店数据', eleStore: '饿了么门店数据',
   mtPromo: '美团推广', elePromo: '饿了么推广', stores: '门店信息表'
 };
+const HIDDEN_STORE_CODES = new Set(['OSZ01']);
 const state = { files: {}, data: {}, mode: 'single', platform: 'mt', results: null };
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -100,7 +101,7 @@ function storeMaster() {
   return d.rows.map(r => ({
     name:String(val(r,d.headers,['店名','门店名称'])??'').trim(), code:id(val(r,d.headers,['店号'])),
     mt:id(val(r,d.headers,['美团门店ID'])), ele:id(val(r,d.headers,['饿了么门店ID']))
-  })).filter(x => x.code);
+  })).filter(x => x.code && !HIDDEN_STORE_CODES.has(x.code));
 }
 function normalizedRate(value) {
   let rate=n(value); if (rate>1) rate/=100; return rate;
