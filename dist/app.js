@@ -100,7 +100,7 @@ function storeMaster() {
   return d.rows.map(r => ({
     name:String(val(r,d.headers,['店名','门店名称'])??'').trim(), code:id(val(r,d.headers,['店号'])),
     mt:id(val(r,d.headers,['美团门店ID'])), ele:id(val(r,d.headers,['饿了么门店ID']))
-  })).filter(x => x.code && x.code.toUpperCase() !== 'OSZ01');
+  })).filter(x => x.code);
 }
 function latestRate(rows, headers, aliases, end) {
   const candidates=rows.map(r=>({d:keyDate(val(r,headers,['日期'])),v:val(r,headers,aliases)})).filter(x=>x.d&&x.d<=end&&x.v!==null&&x.v!=='').sort((a,b)=>a.d.localeCompare(b.d));
@@ -151,7 +151,7 @@ function viewRow(r, period) {
 }
 function renderReport() {
   const r=state.results, rows=r[state.platform], total=rows.at(-1), label=r.start===r.end?r.start:`${r.start} 至 ${r.end}`;
-  $('#reportTitle').textContent=`ORA 流量日报 · ${label}`; $('#reportMeta').textContent=`${r.storeCount} 家门店（已剔除 OSZ01） · ${state.platform==='mt'?'美团':'淘闪'}`;
+  $('#reportTitle').textContent=`ORA 流量日报 · ${label}`; $('#reportMeta').textContent=`${r.storeCount} 家门店（以门店信息表为准） · ${state.platform==='mt'?'美团':'淘闪'}`;
   $('#summaryCards').innerHTML=[['曝光人数',fmt.format(Math.round(total.exposure))],['进店率',total.exposure?pct(total.visits/total.exposure):'—'],['有效订单',fmt.format(Math.round(total.orders))],['推广实付 ROI',total.roi==null?'—':total.roi.toFixed(1)]].map(x=>`<div class="metric"><span>${x[0]}</span><strong>${x[1]}</strong></div>`).join('');
   const headers=['日期','店号','店名','曝光人数','进店率','下单转化率','客单量','客单价','复购率','推广消耗','推广ROI'];
   $('#reportTable').innerHTML=`<thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map((x,i)=>`<tr class="${i===rows.length-1?'total':''}">${viewRow(x,label).map(v=>`<td class="${v==='—'?'na':''}">${v}</td>`).join('')}</tr>`).join('')}</tbody>`;
@@ -204,19 +204,29 @@ function setRowNumber(row,rowNumber) {
   row.setAttribute('r',rowNumber);
   [...row.getElementsByTagName('c')].forEach(cell=>cell.setAttribute('r',cell.getAttribute('r').replace(/\d+$/,rowNumber)));
 }
-function insertStoreRows(doc,totalRow,stores,sourceRow) {
-  if(!stores.length) return totalRow;
+function resizeStoreBlock(doc,startRow,totalRow,stores,sourceRow) {
   const source=rowAt(doc,sourceRow).cloneNode(true);
-  shiftWorksheetRows(doc,totalRow,stores.length);
-  const shiftedTotal=rowAt(doc,totalRow+stores.length);
+  const currentCount=totalRow-startRow, delta=stores.length-currentCount;
+  if(delta>0) {
+    shiftWorksheetRows(doc,totalRow,delta);
+    const shiftedTotal=rowAt(doc,totalRow+delta);
+    for(let index=currentCount;index<stores.length;index+=1) {
+      const row=source.cloneNode(true), rowNumber=startRow+index;
+      setRowNumber(row,rowNumber);
+      shiftedTotal.parentNode.insertBefore(row,shiftedTotal);
+    }
+  } else if(delta<0) {
+    for(let rowNumber=startRow+stores.length;rowNumber<totalRow;rowNumber+=1) {
+      const row=rowAt(doc,rowNumber); if(row) row.parentNode.removeChild(row);
+    }
+    shiftWorksheetRows(doc,totalRow,delta);
+  }
   stores.forEach((store,index)=>{
-    const row=source.cloneNode(true), rowNumber=totalRow+index;
-    setRowNumber(row,rowNumber);
-    shiftedTotal.parentNode.insertBefore(row,shiftedTotal);
+    const rowNumber=startRow+index;
     replaceCellValue(doc,`B${rowNumber}`,store.code,'text');
     replaceCellValue(doc,`C${rowNumber}`,store.name,'text');
   });
-  return totalRow+stores.length;
+  return totalRow+delta;
 }
 function prepareExportStyles(stylesDoc) {
   const ns=stylesDoc.documentElement.namespaceURI;
@@ -322,8 +332,6 @@ async function downloadExcel() {
     const response=await fetch('Ora日报-流量数据 T+1.xlsx');
     if(!response.ok) throw new Error('无法读取报表母版');
     const templateBytes=await response.arrayBuffer();
-    const templateBook=XLSX.read(templateBytes,{type:'array',cellDates:false});
-    const templateSheet=templateBook.Sheets[templateBook.SheetNames[0]];
     const zip=await JSZip.loadAsync(templateBytes);
     const sheetPath='xl/worksheets/sheet1.xml', stylesPath='xl/styles.xml';
     const xml=await zip.file(sheetPath).async('string'), stylesXml=await zip.file(stylesPath).async('string');
@@ -334,13 +342,12 @@ async function downloadExcel() {
     const dateValue=single?excelSerial(r.start):`${r.start.replaceAll('-','/')}至${r.end.replaceAll('-','/')}`;
     const dateType=single?'number':'text';
     const styles=prepareExportStyles(stylesDoc);
-    const originalCodes=(start,end)=>Array.from({length:end-start+1},(_,index)=>String(templateSheet[`B${start+index}`]?.v??'').trim()).filter(Boolean);
-    const mtCodes=originalCodes(4,26), eleCodes=originalCodes(31,53);
-    const newRows=(platform,codes)=>state.results[platform].filter(row=>row.code!=='全国'&&!codes.includes(row.code));
-    const mtNew=newRows('mt',mtCodes), mtTotal=insertStoreRows(doc,27,mtNew,5), mtAll=[...mtCodes,...mtNew.map(row=>row.code)];
-    const eleStart=31+mtNew.length, eleNew=newRows('ele',eleCodes), eleTotal=insertStoreRows(doc,54+mtNew.length,eleNew,eleStart+1), eleAll=[...eleCodes,...eleNew.map(row=>row.code)];
-    fillTemplateBlock(doc,'mt',4,mtAll,mtTotal,dateValue,dateType,styles);
-    fillTemplateBlock(doc,'ele',eleStart,eleAll,eleTotal,dateValue,dateType,styles);
+    const mtStores=r.mt.filter(row=>row.code!=='全国'), mtDelta=mtStores.length-23;
+    const mtTotal=resizeStoreBlock(doc,4,27,mtStores,5), mtCodes=mtStores.map(row=>row.code);
+    const eleStart=31+mtDelta, eleStores=r.ele.filter(row=>row.code!=='全国');
+    const eleTotal=resizeStoreBlock(doc,eleStart,54+mtDelta,eleStores,eleStart+1), eleCodes=eleStores.map(row=>row.code);
+    fillTemplateBlock(doc,'mt',4,mtCodes,mtTotal,dateValue,dateType,styles);
+    fillTemplateBlock(doc,'ele',eleStart,eleCodes,eleTotal,dateValue,dateType,styles);
     centerWorksheetCells(doc,stylesDoc);
     zip.file(sheetPath,new XMLSerializer().serializeToString(doc));
     zip.file(stylesPath,new XMLSerializer().serializeToString(stylesDoc));
