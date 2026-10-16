@@ -147,12 +147,12 @@ function buildResults(start,end) {
   return {start,end,mt,ele,storeCount:stores.length};
 }
 function viewRow(r, period) {
-  return [period,r.code,r.name,r.has?fmt.format(r.exposure):'—',r.has&&r.exposure?pct(r.visits/r.exposure):'—',r.has&&r.visits?pct(r.buyers/r.visits):'—',r.has?fmt.format(r.orders):'—',r.has&&r.orders?money.format(r.pay/r.orders):'—',r.has?pct(r.repeat):'—',money.format(r.spend),r.roi==null?'—':r.roi.toFixed(2)];
+  return [period,r.code,r.name,r.has?fmt.format(Math.round(r.exposure)):'—',r.has&&r.exposure?pct(r.visits/r.exposure):'—',r.has&&r.visits?pct(r.buyers/r.visits):'—',r.has?fmt.format(Math.round(r.orders)):'—',r.has&&r.orders?money.format(r.pay/r.orders):'—',r.has?pct(r.repeat):'—',fmt.format(Math.round(r.spend)),r.roi==null?'—':r.roi.toFixed(1)];
 }
 function renderReport() {
   const r=state.results, rows=r[state.platform], total=rows.at(-1), label=r.start===r.end?r.start:`${r.start} 至 ${r.end}`;
   $('#reportTitle').textContent=`ORA 流量日报 · ${label}`; $('#reportMeta').textContent=`${r.storeCount} 家门店（已剔除 OSZ01） · ${state.platform==='mt'?'美团':'淘闪'}`;
-  $('#summaryCards').innerHTML=[['曝光人数',fmt.format(total.exposure)],['进店率',total.exposure?pct(total.visits/total.exposure):'—'],['有效订单',fmt.format(total.orders)],['推广实付 ROI',total.roi==null?'—':total.roi.toFixed(2)]].map(x=>`<div class="metric"><span>${x[0]}</span><strong>${x[1]}</strong></div>`).join('');
+  $('#summaryCards').innerHTML=[['曝光人数',fmt.format(Math.round(total.exposure))],['进店率',total.exposure?pct(total.visits/total.exposure):'—'],['有效订单',fmt.format(Math.round(total.orders))],['推广实付 ROI',total.roi==null?'—':total.roi.toFixed(1)]].map(x=>`<div class="metric"><span>${x[0]}</span><strong>${x[1]}</strong></div>`).join('');
   const headers=['日期','店号','店名','曝光人数','进店率','下单转化率','客单量','客单价','复购率','推广消耗','推广ROI'];
   $('#reportTable').innerHTML=`<thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map((x,i)=>`<tr class="${i===rows.length-1?'total':''}">${viewRow(x,label).map(v=>`<td class="${v==='—'?'na':''}">${v}</td>`).join('')}</tr>`).join('')}</tbody>`;
   $('#methodText').innerHTML='进店率 = 进店人数 ÷ 曝光人数；下单转化率 = 下单人数 ÷ 进店人数；客单量 = 有效订单；客单价 = 顾客实付 ÷ 有效订单；复购率取所选周期最后一天；推广 ROI = 订单交易额 ÷ 推广实付消耗。总计均由明细分子、分母重新汇总。多日指标不平均每日比例。';
@@ -180,27 +180,100 @@ function replaceCellValue(doc,address,value,type='number') {
     const node=doc.createElementNS(ns,'v'); node.textContent=String(value); cell.appendChild(node);
   }
 }
+function rowAt(doc,rowNumber) {
+  return [...doc.getElementsByTagName('row')].find(row=>Number(row.getAttribute('r'))===rowNumber);
+}
+function shiftA1Rows(reference,startRow,delta) {
+  return String(reference).replace(/(\$?[A-Z]{1,3}\$?)(\d+)/g,(match,column,row)=>`${column}${Number(row)>=startRow?Number(row)+delta:row}`);
+}
+function shiftWorksheetRows(doc,startRow,delta) {
+  [...doc.getElementsByTagName('row')].filter(row=>Number(row.getAttribute('r'))>=startRow).forEach(row=>{
+    const next=Number(row.getAttribute('r'))+delta;
+    row.setAttribute('r',next);
+    [...row.getElementsByTagName('c')].forEach(cell=>cell.setAttribute('r',cell.getAttribute('r').replace(/\d+$/,next)));
+  });
+  const dimension=doc.getElementsByTagName('dimension')[0];
+  if(dimension) dimension.setAttribute('ref',shiftA1Rows(dimension.getAttribute('ref'),startRow,delta));
+  [['mergeCell','ref'],['conditionalFormatting','sqref'],['dataValidation','sqref'],['autoFilter','ref'],['hyperlink','ref']].forEach(([tag,attribute])=>{
+    [...doc.getElementsByTagName(tag)].forEach(node=>{
+      if(node.hasAttribute(attribute)) node.setAttribute(attribute,shiftA1Rows(node.getAttribute(attribute),startRow,delta));
+    });
+  });
+}
+function setRowNumber(row,rowNumber) {
+  row.setAttribute('r',rowNumber);
+  [...row.getElementsByTagName('c')].forEach(cell=>cell.setAttribute('r',cell.getAttribute('r').replace(/\d+$/,rowNumber)));
+}
+function insertStoreRows(doc,totalRow,stores,sourceRow) {
+  if(!stores.length) return totalRow;
+  const source=rowAt(doc,sourceRow).cloneNode(true);
+  shiftWorksheetRows(doc,totalRow,stores.length);
+  const shiftedTotal=rowAt(doc,totalRow+stores.length);
+  stores.forEach((store,index)=>{
+    const row=source.cloneNode(true), rowNumber=totalRow+index;
+    setRowNumber(row,rowNumber);
+    shiftedTotal.parentNode.insertBefore(row,shiftedTotal);
+    replaceCellValue(doc,`B${rowNumber}`,store.code,'text');
+    replaceCellValue(doc,`C${rowNumber}`,store.name,'text');
+  });
+  return totalRow+stores.length;
+}
+function prepareExportStyles(stylesDoc) {
+  const ns=stylesDoc.documentElement.namespaceURI;
+  const numFmts=stylesDoc.getElementsByTagName('numFmts')[0];
+  let oneDecimal=[...numFmts.getElementsByTagName('numFmt')].find(node=>node.getAttribute('formatCode')==='0.0');
+  if(!oneDecimal) {
+    oneDecimal=stylesDoc.createElementNS(ns,'numFmt'); oneDecimal.setAttribute('numFmtId','177'); oneDecimal.setAttribute('formatCode','0.0');
+    numFmts.appendChild(oneDecimal); numFmts.setAttribute('count',numFmts.children.length);
+  }
+  const oneDecimalId=oneDecimal.getAttribute('numFmtId');
+  const fonts=stylesDoc.getElementsByTagName('fonts')[0], boldFont=fonts.children[3].cloneNode(true);
+  if(!boldFont.getElementsByTagName('b').length) boldFont.insertBefore(stylesDoc.createElementNS(ns,'b'),boldFont.firstChild);
+  fonts.appendChild(boldFont); fonts.setAttribute('count',fonts.children.length);
+  const boldFontId=fonts.children.length-1, cellXfs=stylesDoc.getElementsByTagName('cellXfs')[0];
+  const addStyle=(baseIndex,{numFmtId=null,fontId=null}={})=>{
+    const xf=cellXfs.children[baseIndex].cloneNode(true);
+    if(numFmtId!=null) { xf.setAttribute('numFmtId',numFmtId); xf.setAttribute('applyNumberFormat','1'); }
+    if(fontId!=null) { xf.setAttribute('fontId',fontId); xf.setAttribute('applyFont','1'); }
+    cellXfs.appendChild(xf); cellXfs.setAttribute('count',cellXfs.children.length);
+    return cellXfs.children.length-1;
+  };
+  const totalText=addStyle(17,{fontId:boldFontId}), totalGeneral=addStyle(5,{fontId:boldFontId});
+  return {
+    detail:{D:addStyle(41,{numFmtId:'3'}),G:addStyle(42,{numFmtId:'3'}),J:addStyle(43,{numFmtId:'3'}),K:addStyle(44,{numFmtId:oneDecimalId})},
+    total:{A:addStyle(16,{fontId:boldFontId}),B:totalText,C:totalText,D:addStyle(4,{numFmtId:'3',fontId:boldFontId}),E:totalGeneral,F:totalGeneral,G:addStyle(5,{numFmtId:'3',fontId:boldFontId}),H:totalGeneral,I:totalGeneral,J:addStyle(5,{numFmtId:'3',fontId:boldFontId}),K:addStyle(6,{numFmtId:oneDecimalId,fontId:boldFontId})}
+  };
+}
+function applyRowStyles(doc,rowNumber,styles,isTotal=false) {
+  const mapping=isTotal?styles.total:styles.detail;
+  Object.entries(mapping).forEach(([column,style])=>worksheetCell(doc,`${column}${rowNumber}`).setAttribute('s',style));
+}
 function templateMetricValues(row) {
   return [
-    row.has?row.exposure:null,
+    row.has?Math.round(row.exposure):null,
     row.has&&row.exposure?row.visits/row.exposure:null,
     row.has&&row.visits?row.buyers/row.visits:null,
-    row.has?row.orders:null,
+    row.has?Math.round(row.orders):null,
     row.has&&row.orders?row.pay/row.orders:null,
     row.has?row.repeat:null,
-    row.spend,
+    Math.round(row.spend),
     row.roi
   ];
 }
-function fillTemplateBlock(doc,templateSheet,platform,startRow,endRow,dateValue,dateType) {
+function fillTemplateBlock(doc,platform,startRow,codes,totalRow,dateValue,dateType,styles) {
   const byCode=new Map(state.results[platform].map(row=>[row.code,row]));
-  for(let rowNumber=startRow;rowNumber<=endRow;rowNumber++) {
-    const code=String(templateSheet[`B${rowNumber}`]?.v??'').trim();
+  codes.forEach((code,index)=>{
+    const rowNumber=startRow+index;
     const result=byCode.get(code);
     replaceCellValue(doc,`A${rowNumber}`,dateValue,dateType);
     const values=result?templateMetricValues(result):Array(8).fill(null);
     'DEFGHIJK'.split('').forEach((column,index)=>replaceCellValue(doc,`${column}${rowNumber}`,values[index]));
-  }
+    applyRowStyles(doc,rowNumber,styles);
+  });
+  const total=byCode.get('全国');
+  replaceCellValue(doc,`A${totalRow}`,dateValue,dateType);
+  'DEFGHIJK'.split('').forEach((column,index)=>replaceCellValue(doc,`${column}${totalRow}`,templateMetricValues(total)[index]));
+  applyRowStyles(doc,totalRow,styles,true);
 }
 async function downloadExcel() {
   const button=$('#downloadBtn'); button.disabled=true; button.textContent='正在生成…';
@@ -211,22 +284,30 @@ async function downloadExcel() {
     const templateBook=XLSX.read(templateBytes,{type:'array',cellDates:false});
     const templateSheet=templateBook.Sheets[templateBook.SheetNames[0]];
     const zip=await JSZip.loadAsync(templateBytes);
-    const sheetPath='xl/worksheets/sheet1.xml';
-    const xml=await zip.file(sheetPath).async('string');
+    const sheetPath='xl/worksheets/sheet1.xml', stylesPath='xl/styles.xml';
+    const xml=await zip.file(sheetPath).async('string'), stylesXml=await zip.file(stylesPath).async('string');
     const doc=new DOMParser().parseFromString(xml,'application/xml');
-    if(doc.getElementsByTagName('parsererror').length) throw new Error('母版结构读取失败');
+    const stylesDoc=new DOMParser().parseFromString(stylesXml,'application/xml');
+    if(doc.getElementsByTagName('parsererror').length||stylesDoc.getElementsByTagName('parsererror').length) throw new Error('母版结构读取失败');
     const r=state.results, single=r.start===r.end;
     const dateValue=single?excelSerial(r.start):`${r.start.replaceAll('-','/')}至${r.end.replaceAll('-','/')}`;
     const dateType=single?'number':'text';
-    fillTemplateBlock(doc,templateSheet,'mt',4,27,dateValue,dateType);
-    fillTemplateBlock(doc,templateSheet,'ele',31,54,dateValue,dateType);
+    const styles=prepareExportStyles(stylesDoc);
+    const originalCodes=(start,end)=>Array.from({length:end-start+1},(_,index)=>String(templateSheet[`B${start+index}`]?.v??'').trim()).filter(Boolean);
+    const mtCodes=originalCodes(4,26), eleCodes=originalCodes(31,53);
+    const newRows=(platform,codes)=>state.results[platform].filter(row=>row.code!=='全国'&&!codes.includes(row.code));
+    const mtNew=newRows('mt',mtCodes), mtTotal=insertStoreRows(doc,27,mtNew,5), mtAll=[...mtCodes,...mtNew.map(row=>row.code)];
+    const eleStart=31+mtNew.length, eleNew=newRows('ele',eleCodes), eleTotal=insertStoreRows(doc,54+mtNew.length,eleNew,eleStart+1), eleAll=[...eleCodes,...eleNew.map(row=>row.code)];
+    fillTemplateBlock(doc,'mt',4,mtAll,mtTotal,dateValue,dateType,styles);
+    fillTemplateBlock(doc,'ele',eleStart,eleAll,eleTotal,dateValue,dateType,styles);
     zip.file(sheetPath,new XMLSerializer().serializeToString(doc));
+    zip.file(stylesPath,new XMLSerializer().serializeToString(stylesDoc));
     const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}});
     const link=document.createElement('a');
-    link.href=URL.createObjectURL(blob);
+    const objectUrl=URL.createObjectURL(blob); link.href=objectUrl;
     link.download=`Ora日报-流量数据_${r.start}_${r.end}.xlsx`;
     document.body.appendChild(link); link.click(); link.remove();
-    setTimeout(()=>URL.revokeObjectURL(link.href),1000);
+    setTimeout(()=>URL.revokeObjectURL(objectUrl),1000);
     setMessage('已按 Ora日报-流量数据 T+1 母版格式导出。',false,true);
   } catch(e) { setMessage(`导出失败：${e.message}`,true); }
   finally { button.disabled=false; button.textContent='下载 Excel'; }
