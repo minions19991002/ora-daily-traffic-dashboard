@@ -248,6 +248,21 @@ function applyRowStyles(doc,rowNumber,styles,isTotal=false) {
   const mapping=isTotal?styles.total:styles.detail;
   Object.entries(mapping).forEach(([column,style])=>worksheetCell(doc,`${column}${rowNumber}`).setAttribute('s',style));
 }
+function centerWorksheetCells(doc,stylesDoc) {
+  const ns=stylesDoc.documentElement.namespaceURI, cellXfs=stylesDoc.getElementsByTagName('cellXfs')[0], centered=new Map();
+  [...doc.getElementsByTagName('c')].forEach(cell=>{
+    const baseIndex=Number(cell.getAttribute('s')||0);
+    if(!centered.has(baseIndex)) {
+      const xf=cellXfs.children[baseIndex].cloneNode(true);
+      let alignment=xf.getElementsByTagName('alignment')[0];
+      if(!alignment) { alignment=stylesDoc.createElementNS(ns,'alignment'); xf.appendChild(alignment); }
+      alignment.setAttribute('horizontal','center'); xf.setAttribute('applyAlignment','1');
+      cellXfs.appendChild(xf); centered.set(baseIndex,cellXfs.children.length-1);
+    }
+    cell.setAttribute('s',centered.get(baseIndex));
+  });
+  cellXfs.setAttribute('count',cellXfs.children.length);
+}
 function templateMetricValues(row) {
   return [
     row.has?Math.round(row.exposure):null,
@@ -300,6 +315,7 @@ async function downloadExcel() {
     const eleStart=31+mtNew.length, eleNew=newRows('ele',eleCodes), eleTotal=insertStoreRows(doc,54+mtNew.length,eleNew,eleStart+1), eleAll=[...eleCodes,...eleNew.map(row=>row.code)];
     fillTemplateBlock(doc,'mt',4,mtAll,mtTotal,dateValue,dateType,styles);
     fillTemplateBlock(doc,'ele',eleStart,eleAll,eleTotal,dateValue,dateType,styles);
+    centerWorksheetCells(doc,stylesDoc);
     zip.file(sheetPath,new XMLSerializer().serializeToString(doc));
     zip.file(stylesPath,new XMLSerializer().serializeToString(stylesDoc));
     const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}});
