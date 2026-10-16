@@ -102,10 +102,18 @@ function storeMaster() {
     mt:id(val(r,d.headers,['美团门店ID'])), ele:id(val(r,d.headers,['饿了么门店ID']))
   })).filter(x => x.code);
 }
+function normalizedRate(value) {
+  let rate=n(value); if (rate>1) rate/=100; return rate;
+}
+function latestRow(rows, headers, end) {
+  const candidates=rows.map(r=>({d:keyDate(val(r,headers,['日期'])),row:r})).filter(x=>x.d&&x.d<=end).sort((a,b)=>a.d.localeCompare(b.d));
+  return candidates.length?candidates.at(-1).row:null;
+}
 function latestRate(rows, headers, aliases, end) {
-  const candidates=rows.map(r=>({d:keyDate(val(r,headers,['日期'])),v:val(r,headers,aliases)})).filter(x=>x.d&&x.d<=end&&x.v!==null&&x.v!=='').sort((a,b)=>a.d.localeCompare(b.d));
-  if (!candidates.length) return null;
-  let v=n(candidates.at(-1).v); if (v>1) v/=100; return v;
+  const row=latestRow(rows,headers,end);
+  if (!row) return null;
+  const value=val(row,headers,aliases);
+  return value===null||value===''?null:normalizedRate(value);
 }
 function promoAllowed(type,row,headers) {
   const text=['推广产品','计划名称','营销场景'].map(a=>String(val(row,headers,[a])??'')).join('|');
@@ -134,15 +142,25 @@ function storeFor(platform, master, start, end) {
     : n(val(r,d.headers,['平台技术服务费']))+n(val(r,d.headers,['履约技术服务费']))),0);
   const pay=receipt+commission;
   const repeat=latestRate(rows,d.headers,platform==='mt'?['复购率']:['近30日复购率'],end);
+  let repeaters=0, repeatBase=0;
+  if (platform==='mt' && repeat!=null) {
+    repeatBase=buyers;
+    repeaters=repeat*repeatBase;
+  } else if (platform==='ele') {
+    const latest=latestRow(rows,d.headers,end);
+    const latestRepeaters=latest?n(val(latest,d.headers,['近30日复购人数'])):0;
+    if (repeat!=null) {
+      repeaters=latestRepeaters;
+      repeatBase=repeat?latestRepeaters/repeat:0;
+    }
+  }
   const promo=promoFor(platform==='mt'?'mtPromo':'elePromo',pid,start,end);
-  return {code:master.code,name:master.name,pid,has:rows.length>0,exposure,visits,buyers,orders,pay,repeat,...promo};
+  return {code:master.code,name:master.name,pid,has:rows.length>0,exposure,visits,buyers,orders,pay,repeaters,repeatBase,repeat,...promo};
 }
 function totalRows(rows) {
   const has=rows.filter(r=>r.has), sum=k=>has.reduce((s,r)=>s+r[k],0);
-  const exposure=sum('exposure'), visits=sum('visits'), buyers=sum('buyers'), orders=sum('orders'), pay=sum('pay'), spend=rows.reduce((s,r)=>s+r.spend,0), gmv=rows.reduce((s,r)=>s+r.gmv,0);
-  const repeatDen=has.reduce((s,r)=>s+(r.repeat==null?0:r.orders),0);
-  const repeatNum=has.reduce((s,r)=>s+(r.repeat==null?0:r.repeat*r.orders),0);
-  return {code:'全国',name:'',has:has.length>0,exposure,visits,buyers,orders,pay,repeat:repeatDen?repeatNum/repeatDen:null,spend,gmv,roi:spend?gmv/spend:null};
+  const exposure=sum('exposure'), visits=sum('visits'), buyers=sum('buyers'), orders=sum('orders'), pay=sum('pay'), repeaters=sum('repeaters'), repeatBase=sum('repeatBase'), spend=rows.reduce((s,r)=>s+r.spend,0), gmv=rows.reduce((s,r)=>s+r.gmv,0);
+  return {code:'全国',name:'',has:has.length>0,exposure,visits,buyers,orders,pay,repeaters,repeatBase,repeat:repeatBase?repeaters/repeatBase:null,spend,gmv,roi:spend?gmv/spend:null};
 }
 function buildResults(start,end) {
   const stores=storeMaster();
@@ -159,7 +177,7 @@ function renderReport() {
   $('#summaryCards').innerHTML=[['曝光人数',fmt.format(Math.round(total.exposure))],['进店率',total.exposure?pct(total.visits/total.exposure):'—'],['有效订单',fmt.format(Math.round(total.orders))],['推广实付 ROI',total.roi==null?'—':total.roi.toFixed(1)]].map(x=>`<div class="metric"><span>${x[0]}</span><strong>${x[1]}</strong></div>`).join('');
   const headers=['日期','店号','店名','曝光人数','进店率','下单转化率','客单量','客单价','复购率','推广消耗','推广ROI'];
   $('#reportTable').innerHTML=`<thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map((x,i)=>`<tr class="${i===rows.length-1?'total':''}">${viewRow(x,label).map(v=>`<td class="${v==='—'?'na':''}">${v}</td>`).join('')}</tr>`).join('')}</tbody>`;
-  $('#methodText').innerHTML='进店率 = 进店人数 ÷ 曝光人数；下单转化率 = 下单人数 ÷ 进店人数；客单量 = 有效订单；客单价 =（实收 + 佣金）÷ 有效订单。美团实收取营业收入，佣金取平台服务费（含佣金和配送服务费）；淘闪实收取收入，佣金取平台技术服务费 + 履约技术服务费。复购率取所选周期最后一天；推广 ROI = 订单交易额 ÷ 推广实付消耗。全国行均由门店明细分子、分母重新汇总，多日指标不平均每日比例。';
+  $('#methodText').innerHTML='进店率 = 进店人数 ÷ 曝光人数；下单转化率 = 下单人数 ÷ 进店人数；客单量 = 有效订单；客单价 =（实收 + 佣金）÷ 有效订单。美团实收取营业收入，佣金取平台服务费（含佣金和配送服务费）；淘闪实收取收入，佣金取平台技术服务费 + 履约技术服务费。门店复购率取所选周期最后一天；全国复购率 = 复购人数合计 ÷ 下单人数合计。美团按复购率 × 下单人数还原复购人数；淘闪按近30日复购人数 ÷ 近30日复购率还原下单人数。推广 ROI = 订单交易额 ÷ 推广实付消耗。全国行其他指标均由门店明细分子、分母重新汇总，多日指标不平均每日比例。';
   $('#report').classList.remove('hidden'); $('#report').scrollIntoView({behavior:'smooth',block:'start'});
 }
 const excelSerial = iso => {
