@@ -246,7 +246,13 @@ function prepareExportStyles(stylesDoc) {
     return String(borders.children.length-1);
   };
   const totalLeftBorder=addThinBorder(['left','top','bottom']), totalMiddleBorder=addThinBorder(['top','bottom']), totalRightBorder=addThinBorder(['right','top','bottom']);
-  const fonts=stylesDoc.getElementsByTagName('fonts')[0], boldFont=fonts.children[3].cloneNode(true);
+  const fonts=stylesDoc.getElementsByTagName('fonts')[0];
+  [...fonts.children].forEach(font=>{
+    let name=font.getElementsByTagName('name')[0];
+    if(!name) { name=stylesDoc.createElementNS(ns,'name'); font.appendChild(name); }
+    name.setAttribute('val','Calibri');
+  });
+  const boldFont=fonts.children[3].cloneNode(true);
   if(!boldFont.getElementsByTagName('b').length) boldFont.insertBefore(stylesDoc.createElementNS(ns,'b'),boldFont.firstChild);
   fonts.appendChild(boldFont); fonts.setAttribute('count',fonts.children.length);
   const boldFontId=fonts.children.length-1, cellXfs=stylesDoc.getElementsByTagName('cellXfs')[0];
