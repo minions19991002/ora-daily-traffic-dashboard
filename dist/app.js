@@ -158,17 +158,78 @@ function renderReport() {
   $('#methodText').innerHTML='进店率 = 进店人数 ÷ 曝光人数；下单转化率 = 下单人数 ÷ 进店人数；客单量 = 有效订单；客单价 = 顾客实付 ÷ 有效订单；复购率取所选周期最后一天；推广 ROI = 订单交易额 ÷ 推广实付消耗。总计均由明细分子、分母重新汇总。多日指标不平均每日比例。';
   $('#report').classList.remove('hidden'); $('#report').scrollIntoView({behavior:'smooth',block:'start'});
 }
-function exportRows(platform,label) {
-  const rows=state.results[platform];
-  return [[platform==='mt'?'美团':'淘闪',...Array(10).fill('')],['日期','店号','店名','曝光人数','进店率','下单转化率','客单量','客单价','复购率','推广消耗','推广ROI'],...rows.map(r=>[label,r.code,r.name,r.has?r.exposure:null,r.has&&r.exposure?r.visits/r.exposure:null,r.has&&r.visits?r.buyers/r.visits:null,r.has?r.orders:null,r.has&&r.orders?r.pay/r.orders:null,r.has?r.repeat:null,r.spend,r.roi])];
+const excelSerial = iso => {
+  const [y,m,d]=iso.split('-').map(Number);
+  return Math.round((Date.UTC(y,m-1,d)-Date.UTC(1899,11,30))/86400000);
+};
+function worksheetCell(doc,address) {
+  return [...doc.getElementsByTagName('c')].find(cell=>cell.getAttribute('r')===address);
 }
-function downloadExcel() {
-  const r=state.results,label=r.start===r.end?r.start:`${r.start}至${r.end}`;
-  const aoa=[...exportRows('mt',label),[],...exportRows('ele',label)]; const ws=XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols']=[{wch:22},{wch:12},{wch:24},{wch:13},{wch:12},{wch:14},{wch:12},{wch:12},{wch:12},{wch:14},{wch:12}];
-  const range=XLSX.utils.decode_range(ws['!ref']);
-  for(let R=0;R<=range.e.r;R++) for(let C=0;C<=range.e.c;C++){const cell=ws[XLSX.utils.encode_cell({r:R,c:C})];if(!cell)continue;if([4,5,8].includes(C)&&typeof cell.v==='number')cell.z='0.0%';if([7,9].includes(C)&&typeof cell.v==='number')cell.z='#,##0.00';if(C===10&&typeof cell.v==='number')cell.z='0.00';}
-  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'流量日报'); XLSX.writeFile(wb,`ORA流量日报_${r.start}_${r.end}.xlsx`);
+function replaceCellValue(doc,address,value,type='number') {
+  const cell=worksheetCell(doc,address);
+  if (!cell) throw new Error(`母版缺少单元格 ${address}`);
+  [...cell.childNodes].forEach(node=>cell.removeChild(node));
+  cell.removeAttribute('t');
+  if (value==null || value==='' || (typeof value==='number' && !Number.isFinite(value))) return;
+  const ns=doc.documentElement.namespaceURI;
+  if (type==='text') {
+    cell.setAttribute('t','inlineStr');
+    const is=doc.createElementNS(ns,'is'), text=doc.createElementNS(ns,'t');
+    text.textContent=String(value); is.appendChild(text); cell.appendChild(is);
+  } else {
+    const node=doc.createElementNS(ns,'v'); node.textContent=String(value); cell.appendChild(node);
+  }
+}
+function templateMetricValues(row) {
+  return [
+    row.has?row.exposure:null,
+    row.has&&row.exposure?row.visits/row.exposure:null,
+    row.has&&row.visits?row.buyers/row.visits:null,
+    row.has?row.orders:null,
+    row.has&&row.orders?row.pay/row.orders:null,
+    row.has?row.repeat:null,
+    row.spend,
+    row.roi
+  ];
+}
+function fillTemplateBlock(doc,templateSheet,platform,startRow,endRow,dateValue,dateType) {
+  const byCode=new Map(state.results[platform].map(row=>[row.code,row]));
+  for(let rowNumber=startRow;rowNumber<=endRow;rowNumber++) {
+    const code=String(templateSheet[`B${rowNumber}`]?.v??'').trim();
+    const result=byCode.get(code);
+    replaceCellValue(doc,`A${rowNumber}`,dateValue,dateType);
+    const values=result?templateMetricValues(result):Array(8).fill(null);
+    'DEFGHIJK'.split('').forEach((column,index)=>replaceCellValue(doc,`${column}${rowNumber}`,values[index]));
+  }
+}
+async function downloadExcel() {
+  const button=$('#downloadBtn'); button.disabled=true; button.textContent='正在生成…';
+  try {
+    const response=await fetch('Ora日报-流量数据 T+1.xlsx');
+    if(!response.ok) throw new Error('无法读取报表母版');
+    const templateBytes=await response.arrayBuffer();
+    const templateBook=XLSX.read(templateBytes,{type:'array',cellDates:false});
+    const templateSheet=templateBook.Sheets[templateBook.SheetNames[0]];
+    const zip=await JSZip.loadAsync(templateBytes);
+    const sheetPath='xl/worksheets/sheet1.xml';
+    const xml=await zip.file(sheetPath).async('string');
+    const doc=new DOMParser().parseFromString(xml,'application/xml');
+    if(doc.getElementsByTagName('parsererror').length) throw new Error('母版结构读取失败');
+    const r=state.results, single=r.start===r.end;
+    const dateValue=single?excelSerial(r.start):`${r.start.replaceAll('-','/')}至${r.end.replaceAll('-','/')}`;
+    const dateType=single?'number':'text';
+    fillTemplateBlock(doc,templateSheet,'mt',4,27,dateValue,dateType);
+    fillTemplateBlock(doc,templateSheet,'ele',31,54,dateValue,dateType);
+    zip.file(sheetPath,new XMLSerializer().serializeToString(doc));
+    const blob=await zip.generateAsync({type:'blob',compression:'DEFLATE',compressionOptions:{level:6}});
+    const link=document.createElement('a');
+    link.href=URL.createObjectURL(blob);
+    link.download=`Ora日报-流量数据_${r.start}_${r.end}.xlsx`;
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(()=>URL.revokeObjectURL(link.href),1000);
+    setMessage('已按 Ora日报-流量数据 T+1 母版格式导出。',false,true);
+  } catch(e) { setMessage(`导出失败：${e.message}`,true); }
+  finally { button.disabled=false; button.textContent='下载 Excel'; }
 }
 
 $('#fileInput').addEventListener('change',e=>ingest([...e.target.files]));
