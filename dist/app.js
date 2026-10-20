@@ -330,7 +330,7 @@ function templateMetricValues(row) {
     row.has?Math.round(row.orders):null,
     row.has&&row.orders?row.pay/row.orders:null,
     row.has?row.repeat:null,
-    Math.round(row.spend),
+    row.spend,
     row.roi
   ];
 }
