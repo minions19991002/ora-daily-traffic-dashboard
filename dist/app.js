@@ -283,7 +283,7 @@ function prepareExportStyles(stylesDoc) {
   [...fonts.children].forEach(font=>{
     let name=font.getElementsByTagName('name')[0];
     if(!name) { name=stylesDoc.createElementNS(ns,'name'); font.appendChild(name); }
-    name.setAttribute('val','Calibri');
+    name.setAttribute('val','等线');
   });
   const boldFont=fonts.children[3].cloneNode(true);
   if(!boldFont.getElementsByTagName('b').length) boldFont.insertBefore(stylesDoc.createElementNS(ns,'b'),boldFont.firstChild);
