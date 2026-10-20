@@ -22,3 +22,4 @@ main{width:min(1280px,calc(100% - 32px))}
 @media(max-width:540px){main{width:min(100% - 20px,1280px)}.topbar{height:56px}.hero{padding:22px 0 18px}.hero h1{font-size:42px}.hero-copy{font-size:14px}.steps{font-size:11px;padding:13px 12px}.steps i{margin:0 7px}.steps b{width:22px;height:22px}.panel{padding:17px;border-radius:13px}.file-grid{grid-template-columns:1fr}}
 
 body,button,input,.brand-mark,.brand strong,.hero h1,.section-head h2,.report-head h2,.steps b,.metric strong{font-family:DengXian,"等线","Microsoft YaHei UI","PingFang SC",sans-serif}
+tbody tr.total td{font-weight:700}

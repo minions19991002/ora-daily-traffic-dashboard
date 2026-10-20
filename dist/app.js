@@ -286,7 +286,12 @@ function prepareExportStyles(stylesDoc) {
     name.setAttribute('val','等线');
   });
   const boldFont=fonts.children[3].cloneNode(true);
-  if(!boldFont.getElementsByTagName('b').length) boldFont.insertBefore(stylesDoc.createElementNS(ns,'b'),boldFont.firstChild);
+  let boldMarker=boldFont.getElementsByTagName('b')[0];
+  if(!boldMarker) {
+    boldMarker=stylesDoc.createElementNS(ns,'b');
+    boldFont.insertBefore(boldMarker,boldFont.firstChild);
+  }
+  boldMarker.setAttribute('val','1');
   fonts.appendChild(boldFont); fonts.setAttribute('count',fonts.children.length);
   const boldFontId=fonts.children.length-1, cellXfs=stylesDoc.getElementsByTagName('cellXfs')[0];
   const addStyle=(baseIndex,{numFmtId=null,fontId=null,borderId=null}={})=>{
