@@ -304,7 +304,7 @@ function prepareExportStyles(stylesDoc) {
   };
   const totalText=addStyle(17,{fontId:boldFontId,borderId:totalMiddleBorder}), totalPercent=addStyle(5,{numFmtId:percentId,fontId:boldFontId,borderId:totalMiddleBorder}), totalMoney=addStyle(5,{numFmtId:'2',fontId:boldFontId,borderId:totalMiddleBorder});
   return {
-    detail:{D:addStyle(41,{numFmtId:'3',borderId:'4'}),E:addStyle(42,{numFmtId:percentId,borderId:'0'}),F:addStyle(42,{numFmtId:percentId,borderId:'0'}),G:addStyle(42,{numFmtId:'3',borderId:'0'}),H:addStyle(42,{numFmtId:'2',borderId:'0'}),I:addStyle(42,{numFmtId:percentId,borderId:'0'}),J:addStyle(43,{numFmtId:'3',borderId:'0'}),K:addStyle(44,{numFmtId:oneDecimalId,borderId:'5'})},
+    detail:{A:'15',B:'11',C:'37',D:addStyle(41,{numFmtId:'3',borderId:'4'}),E:addStyle(42,{numFmtId:percentId,borderId:'0'}),F:addStyle(42,{numFmtId:percentId,borderId:'0'}),G:addStyle(42,{numFmtId:'3',borderId:'0'}),H:addStyle(42,{numFmtId:'2',borderId:'0'}),I:addStyle(42,{numFmtId:percentId,borderId:'0'}),J:addStyle(43,{numFmtId:'3',borderId:'0'}),K:addStyle(44,{numFmtId:oneDecimalId,borderId:'5'})},
     total:{A:addStyle(16,{fontId:boldFontId,borderId:totalLeftBorder}),B:totalText,C:totalText,D:addStyle(4,{numFmtId:'3',fontId:boldFontId,borderId:totalLeftBorder}),E:totalPercent,F:totalPercent,G:addStyle(5,{numFmtId:'3',fontId:boldFontId,borderId:totalMiddleBorder}),H:totalMoney,I:totalPercent,J:addStyle(5,{numFmtId:'3',fontId:boldFontId,borderId:totalMiddleBorder}),K:addStyle(6,{numFmtId:oneDecimalId,fontId:boldFontId,borderId:totalRightBorder})}
   };
 }
